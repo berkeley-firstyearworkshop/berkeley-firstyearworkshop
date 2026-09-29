@@ -6,6 +6,8 @@
 <title>First-Year Workshop | UC Berkeley</title>
 <meta name="description" content="Weekly informal presentations for first-year PhD students in Econ, Haas and ARE at UC Berkeley.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📊</text></svg>">
+<link rel="preconnect" href="https://script.google.com">
+<link rel="preconnect" href="https://script.googleusercontent.com">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,600&display=swap" rel="stylesheet">
@@ -118,6 +120,15 @@
   .queued { border: 1.5px dashed var(--line); color: var(--muted); opacity: .55; justify-content: center; align-items: center; }
   .status { color: var(--muted); padding: 1.25rem 0; border-top: 1px solid var(--line); margin: 0; }
 
+  /* Mailing list */
+  .subscribe { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: 1.25rem; max-width: 42rem; }
+  .subscribe input { flex: 1 1 11rem; font: inherit; padding: .7rem .75rem; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--ink); }
+  .subscribe button { flex: 0 0 auto; }
+  .btn-blue { background: var(--booked); color: #fff; }
+  .btn-blue:disabled { opacity: .6; cursor: wait; }
+  .sub-msg { margin: .75rem 0 0; font-size: .95rem; }
+  .sub-msg.bad { color: var(--error); }
+
   /* FAQ */
   details { border-top: 1px solid var(--line); padding: 1.1rem 0; }
   details:last-child { border-bottom: 1px solid var(--line); }
@@ -138,11 +149,13 @@
   /* Dialog */
   dialog { border: 0; border-radius: 8px; padding: 0; width: calc(100% - 2rem); max-width: 30rem; background: var(--bg); color: var(--ink); box-shadow: 0 20px 50px rgba(0, 20, 40, .3); }
   dialog::backdrop { background: rgba(0, 30, 55, .5); }
-  form { padding: 1.5rem; display: grid; gap: .9rem; }
-  form h2 { font: 600 1.5rem/1.2 var(--serif); margin: 0; }
+  dialog form { padding: 1.5rem; display: grid; gap: .9rem; }
+  dialog form h2 { font: 600 1.5rem/1.2 var(--serif); margin: 0; }
   .when { margin: -.5rem 0 .25rem; color: var(--muted); }
   label { display: grid; gap: .3rem; font-weight: 500; font-size: .9rem; }
-  input:not([type=radio]), select { font: inherit; font-weight: 400; padding: .55rem .65rem; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--ink); }
+  input:not([type=radio]):not([type=checkbox]), select { font: inherit; font-weight: 400; padding: .55rem .65rem; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--ink); }
+  input:disabled { opacity: .55; }
+  .tbd { margin-top: -.5rem; font-size: .9rem; }
   fieldset { border: 0; padding: 0; margin: 0; display: grid; gap: .35rem; }
   legend { font-weight: 500; font-size: .9rem; margin-bottom: .35rem; }
   label.radio { display: flex; align-items: center; gap: .5rem; font-weight: 400; font-size: 1rem; }
@@ -182,6 +195,7 @@
     <ul>
       <li><a href="#about">How it works</a></li>
       <li><a href="#schedule">Schedule</a></li>
+      <li><a href="#list">Mailing list</a></li>
       <li><a href="#faq">FAQ</a></li>
       <li><a class="btn btn-gold" href="#schedule">Sign up</a></li>
     </ul>
@@ -244,6 +258,21 @@
     </div>
   </section>
 
+  <section class="section" id="list">
+    <div class="wrap split">
+      <h2 class="title">Mailing list</h2>
+      <div>
+        <p class="muted">One email a week with who's presenting and what on. Unsubscribe any time.</p>
+        <form class="subscribe" id="subForm" novalidate>
+          <input name="name" placeholder="Name (optional)" maxlength="100" autocomplete="name" aria-label="Name (optional)">
+          <input name="email" type="email" placeholder="Email" required maxlength="120" autocomplete="email" aria-label="Email">
+          <button class="btn btn-blue" type="submit" id="subBtn">Subscribe</button>
+        </form>
+        <p class="sub-msg" id="subMsg" role="status" hidden></p>
+      </div>
+    </div>
+  </section>
+
   <section class="section" id="faq">
     <div class="wrap split">
       <h2 class="title">FAQ</h2>
@@ -299,6 +328,7 @@
       </select>
     </label>
     <label>Working title <input name="title" required maxlength="200" placeholder="Rough is fine"></label>
+    <label class="radio tbd"><input type="checkbox" id="tbd"> Title to be decided</label>
     <fieldset>
       <legend>What are you presenting?</legend>
       <label class="radio"><input type="radio" name="type" value="paper" required> A paper or draft</label>
@@ -403,15 +433,26 @@ async function load() {
     $('notice').hidden = false;
     return render();
   }
+  // Show the last copy saved in this browser straight away, then refresh it.
+  const cached = readCache();
+  if (cached) { sessions = cached; render(); }
   try {
     const d = await (await fetch(API_URL)).json();
     if (!d.ok) throw new Error(d.error);
-    sessions = d.sessions;
-    render();
+    setSessions(d.sessions);
   } catch (e) {
+    if (cached) return;
     $('weeks').innerHTML = '<p class="status">The schedule could not load. Refresh the page to try again.</p>';
     $('programme').innerHTML = '<p class="kicker">The programme could not load.</p>';
   }
+}
+
+const CACHE = 'fyw-sessions';
+function readCache() { try { return JSON.parse(localStorage.getItem(CACHE)); } catch (e) { return null; } }
+function setSessions(list) {
+  sessions = list;
+  try { localStorage.setItem(CACHE, JSON.stringify(list)); } catch (e) {}
+  render();
 }
 
 function openDialog(date) {
@@ -444,6 +485,14 @@ document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click
   render();
 }));
 
+// "Title to be decided" greys out the title box and sends TBD instead.
+function syncTbd() {
+  const t = $('form').elements.title;
+  t.disabled = $('tbd').checked;
+  t.placeholder = t.disabled ? 'TBD' : 'Rough is fine';
+}
+$('tbd').addEventListener('change', syncTbd);
+
 $('form').addEventListener('submit', async e => {
   e.preventDefault();
   const form = e.target;
@@ -453,6 +502,7 @@ $('form').addEventListener('submit', async e => {
     return bad.focus();
   }
   const payload = { ...Object.fromEntries(new FormData(form)), date: current.date };
+  if ($('tbd').checked) payload.title = 'TBD';
   const btn = $('submit');
   btn.disabled = true; btn.textContent = 'Signing up…';
   try {
@@ -461,15 +511,40 @@ $('form').addEventListener('submit', async e => {
       headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // avoids a CORS preflight, which Apps Script can't answer
       body: JSON.stringify(payload),
     })).json();
-    if (d.sessions) { sessions = d.sessions; render(); }
+    if (d.sessions) DEMO ? render() : setSessions(d.sessions);
     if (!d.ok) return showError(d.error);
     $('signup').close();
     form.reset();
+    syncTbd();
     toast(`Signed up for ${fmtDate(current.date, { weekday: 'short', day: 'numeric', month: 'short' })}, ${range(d.slot.time)}pm.`);
   } catch (err) {
     showError('Your sign-up did not go through. Check your connection and try again.');
   } finally {
     btn.disabled = false; btn.textContent = 'Sign up';
+  }
+});
+
+$('subForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const form = e.target;
+  const msg = $('subMsg');
+  const say = (text, bad) => { msg.textContent = text; msg.className = 'sub-msg' + (bad ? ' bad' : ''); msg.hidden = false; };
+  if (!form.email.checkValidity()) return say('Enter a valid email address.', true);
+  const btn = $('subBtn');
+  btn.disabled = true; btn.textContent = 'Subscribing…';
+  try {
+    const d = DEMO ? { ok: true } : await (await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'subscribe', ...Object.fromEntries(new FormData(form)) }),
+    })).json();
+    if (!d.ok) return say(d.error, true);
+    form.reset();
+    say("Subscribed. You'll get the line-up each week.");
+  } catch (err) {
+    say('Subscribing did not work. Check your connection and try again.', true);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Subscribe';
   }
 });
 
