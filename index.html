@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>First-Year Workshop | UC Berkeley</title>
-<meta name="description" content="Weekly informal presentations for first-year PhD students in Econ, Haas and ARE at UC Berkeley.">
+<title>First-Year Workshop | Econ, ARE and Haas</title>
+<meta name="description" content="Weekly informal presentations for first-year PhD students in Economics, Agricultural & Resource Economics and Haas.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📊</text></svg>">
 <link rel="preconnect" href="https://script.google.com">
 <link rel="preconnect" href="https://script.googleusercontent.com">
@@ -48,7 +48,8 @@
   /* Nav */
   .nav { position: sticky; top: 0; z-index: 10; background: var(--bg); border-bottom: 1px solid var(--line); }
   .nav .wrap { display: flex; align-items: center; justify-content: space-between; height: 64px; }
-  .brand { font: 600 1.25rem var(--serif); color: var(--title); text-decoration: none; }
+  .brand { font: 600 1.25rem var(--serif); color: var(--title); text-decoration: none; white-space: nowrap; }
+  .brand-sub { font: 500 .8rem var(--sans); color: var(--muted); margin-left: .5rem; }
   .nav ul { display: flex; align-items: center; gap: 1.75rem; list-style: none; margin: 0; padding: 0; }
   .nav ul a { color: var(--ink); text-decoration: none; font-weight: 500; font-size: .95rem; }
   .nav ul a:hover { color: var(--accent); }
@@ -58,6 +59,7 @@
   .hero { background: var(--hero); color: #fff; }
   .hero .wrap { display: grid; grid-template-columns: 1.15fr 1fr; gap: 4rem; align-items: center; padding-top: 5rem; padding-bottom: 5rem; }
   .hero h1 { font: 600 clamp(2.6rem, 5.5vw, 4.25rem)/1.02 var(--serif); letter-spacing: -0.015em; margin: 0 0 1.25rem; }
+  .depts { margin: 0 0 1.25rem; font-size: .95rem; font-weight: 500; color: var(--hero-muted); }
   .hero .lede { color: var(--hero-muted); font-size: 1.125rem; max-width: 30rem; margin: 0 0 2rem; }
   .hero-actions { display: flex; flex-wrap: wrap; gap: .75rem; }
 
@@ -89,14 +91,13 @@
   .sched-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 1.25rem; margin-bottom: 2rem; }
   .sched-head p { margin: .5rem 0 0; }
   .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 1.5rem; }
-  .legend { display: flex; gap: 1.1rem; font-size: .85rem; color: var(--muted); }
   .tabs { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; padding: 3px; }
   .tabs button { font: 500 .9rem var(--sans); border: 0; background: none; color: var(--muted); padding: .45rem .9rem; border-radius: 4px; cursor: pointer; }
   .tabs button[aria-selected="true"] { background: var(--booked); color: #fff; }
 
   .kind::before { content: ""; display: inline-block; width: .55rem; height: .55rem; border-radius: 50%; margin-right: .4rem; vertical-align: .05em; }
-  .kind-paper::before { background: var(--gold); }
-  .kind-idea::before { box-shadow: inset 0 0 0 1.5px var(--gold); }
+  .kind-paper::before { background: currentColor; }
+  .kind-idea::before { box-shadow: inset 0 0 0 1.5px currentColor; }
 
   .week { display: grid; grid-template-columns: 5.5rem 1fr; gap: 1.25rem; padding: 1.25rem 0; border-top: 1px solid var(--line); }
   .date { margin: 0; display: flex; flex-direction: column; align-items: flex-start; font-family: var(--serif); font-weight: 600; line-height: 1; }
@@ -173,6 +174,7 @@
     .section { padding: 3.5rem 0; }
     .split, .points { grid-template-columns: 1fr; gap: 1.5rem; }
   }
+  @media (max-width: 480px) { .brand-sub { display: none; } }
   @media (max-width: 640px) {
     .week { grid-template-columns: 1fr; gap: .6rem; }
     .date { flex-direction: row; align-items: baseline; gap: .4rem; }
@@ -191,7 +193,7 @@
 
 <nav class="nav" aria-label="Main">
   <div class="wrap">
-    <a class="brand" href="#">First-Year Workshop</a>
+    <a class="brand" href="#">First-Year Workshop <span class="brand-sub">Econ, ARE, Haas</span></a>
     <ul>
       <li><a href="#about">How it works</a></li>
       <li><a href="#schedule">Schedule</a></li>
@@ -205,8 +207,9 @@
 <header class="hero">
   <div class="wrap">
     <div>
+      <p class="depts">Economics, Agricultural &amp; Resource Economics and Haas</p>
       <h1>First-Year Workshop</h1>
-      <p class="lede">An informal weekly session where first-year PhD students at UC Berkeley try out papers and early-stage ideas on each other. Wednesdays, 3-4pm.</p>
+      <p class="lede">An informal weekly session where first-year PhD students in Econ, ARE and Haas try out papers and early-stage ideas on each other. Wednesdays, <span style="white-space:nowrap">3-4pm</span>.</p>
       <div class="hero-actions">
         <a class="btn btn-gold" href="#schedule">Sign up for a slot</a>
         <a class="btn btn-ghost" href="#about">How it works</a>
@@ -225,15 +228,15 @@
       <div class="points">
         <div>
           <h3>Fifteen minutes each</h3>
-          <p>Four back-to-back slots per session. Present for about ten minutes, then take questions.</p>
+          <p>Four back-to-back slots per session. Questions are welcome throughout, so leave some room for them.</p>
         </div>
         <div>
           <h3>Any stage of work</h3>
           <p>A draft paper, a replication, a dataset you found, or an idea you had last week.</p>
         </div>
         <div>
-          <h3>Open to all first years</h3>
-          <p>Econ, Haas, ARE and other departments. Come to present or just to listen.</p>
+          <h3>Econ, ARE and Haas</h3>
+          <p>First years from all three programmes, plus anyone else who's interested. Come to present or just to listen.</p>
         </div>
       </div>
     </div>
@@ -247,7 +250,6 @@
           <p class="muted">Wednesdays, 3-4pm, room TBC. Slots fill in order.</p>
         </div>
         <div class="controls">
-          <div class="legend"><span class="kind kind-paper">Paper</span><span class="kind kind-idea">Early idea</span></div>
           <div class="tabs" role="tablist" aria-label="Sessions">
             <button role="tab" aria-selected="true" data-tab="upcoming">Upcoming</button>
             <button role="tab" aria-selected="false" data-tab="past">Past</button>
@@ -279,7 +281,7 @@
       <div>
         <details>
           <summary>Can I cancel or swap my slot?</summary>
-          <p>Yes. Email <a href="mailto:organiser@berkeley.edu">organiser@berkeley.edu</a> and we'll update the schedule.</p>
+          <p>Yes. Email <a href="mailto:berkeleyfirstyearworkshop@gmail.com">berkeleyfirstyearworkshop@gmail.com</a> and we'll update the schedule.</p>
         </details>
         <details>
           <summary>Can I choose my time?</summary>
@@ -288,6 +290,10 @@
         <details>
           <summary>Can I sign up for more than one slot?</summary>
           <p>You can hold one upcoming slot at a time so everyone gets a turn. Once you've presented, you can book again.</p>
+        </details>
+        <details>
+          <summary>I'm not in Econ, ARE or Haas. Can I present?</summary>
+          <p>Yes. Choose Other when you sign up.</p>
         </details>
         <details>
           <summary>Do I need slides?</summary>
@@ -306,11 +312,10 @@
   <div class="wrap">
     <div>
       <span class="brand">First-Year Workshop</span>
-      <p>For first-year PhD students at UC Berkeley.</p>
+      <p>For first-year PhD students in Economics, ARE and Haas.</p>
     </div>
     <div>
-      <p>Organised by Organiser Name and Organiser Name</p>
-      <p>Contact: <a href="mailto:organiser@berkeley.edu">organiser@berkeley.edu</a></p>
+      <p>Contact: <a href="mailto:berkeleyfirstyearworkshop@gmail.com">berkeleyfirstyearworkshop@gmail.com</a></p>
     </div>
   </div>
 </footer>
@@ -324,7 +329,7 @@
     <label>Department
       <select name="department" required>
         <option value="" disabled selected>Choose one</option>
-        <option>Econ</option><option>Haas</option><option>ARE</option><option>Other</option>
+        <option>Econ</option><option>ARE</option><option>Haas</option><option>Other</option>
       </select>
     </label>
     <label>Working title <input name="title" required maxlength="200" placeholder="Rough is fine"></label>

@@ -11,9 +11,24 @@ const SHEET_NAME = 'Bookings';
 
 const HEADERS = ['slot_id', 'date', 'time', 'name', 'email', 'department', 'title', 'type', 'booked_at'];
 
-function doGet() {
-  return json_({ ok: true, sessions: buildSessions_() });
+function doGet(e) {
+  if (e && e.parameter && e.parameter.action === 'unsubscribe') return unsubscribePage_(e.parameter);
+  return json_({ ok: true, sessions: cachedSessions_() });
 }
+
+// The schedule is cached for up to 10 minutes so most visits skip reading the Sheet.
+// It is cleared whenever someone books or the Sheet is edited by hand.
+const CACHE_KEY = 'sessions';
+function cachedSessions_() {
+  const cache = CacheService.getScriptCache();
+  const hit = cache.get(CACHE_KEY);
+  if (hit) return JSON.parse(hit);
+  const sessions = buildSessions_();
+  cache.put(CACHE_KEY, JSON.stringify(sessions), 600);
+  return sessions;
+}
+function clearCache_() { CacheService.getScriptCache().remove(CACHE_KEY); }
+function onEdit() { clearCache_(); }
 
 // People sign up for a session, not a time. The script gives them the earliest free slot,
 // so sessions fill in order and a slot freed by a cancellation is the next one taken.
@@ -27,6 +42,7 @@ function doPost(e) {
   try {
     let d;
     try { d = JSON.parse(e.postData.contents); } catch (err) { return json_({ ok: false, error: 'Invalid request.' }); }
+    if (d.action === 'subscribe') return json_(subscribe_(d)); // mailing list, see Mailing.gs
 
     const clean = {
       date: str_(d.date, 10),
@@ -62,6 +78,8 @@ function doPost(e) {
       id, clean.date, time,
       safe_(clean.name), clean.email, safe_(clean.department), safe_(clean.title), clean.type, new Date(),
     ]);
+    clearCache_();
+    trySend_(() => sendBookingConfirmation_(clean, time)); // see Mailing.gs
     return json_({ ok: true, slot: { id: id, time: time }, sessions: buildSessions_() });
   } finally {
     lock.releaseLock();
