@@ -17,6 +17,7 @@ const ADMIN_EMAIL = 'berkeleyfirstyearworkshop@gmail.com';                      
 const TYPE_LABEL = { paper: 'Paper', idea: 'Early idea' };
 const FORMAT_NOTE = 'You have 15 minutes and questions are welcome throughout, so leave some room for them.';
 const WELCOME_NOTE = 'Everyone is welcome to participate!';
+const OPEN_NOTE = "You don't need a finished paper to present: a rough idea, an early result or a question you're stuck on all make for a good 15 minutes.";
 
 // Run once from the editor (and again after changing REMINDER or ANNOUNCE).
 // Each trigger runs daily and only sends when a session is exactly `daysBefore` days away.
@@ -167,6 +168,9 @@ function announce_(testTo) {
   const open = s.slots.length - talks.length;
   const when = `${fmtLong_(s.date)}, ${sessionRange_()}, ${ROOM}`;
   const openWords = `${open} ${open === 1 ? 'slot is' : 'slots are'} still open.`;
+  const laterSpace = !open && buildSessions_().some(x => x.date > s.date && x.slots.some(y => !y.booking));
+  const signup = open ? openWords : laterSpace ? 'This week is fully booked.' : '';
+  const signupLink = open ? 'Sign up on the website' : 'Sign up for a future week';
 
   const invite = ics_({
     uid: `${s.date}-session@${host_()}`,
@@ -185,12 +189,12 @@ ${when}
 
 ${talks.length ? lineupText_(talks) : 'No talks booked yet.'}
 
-${open ? `${openWords} Sign up at ${SITE_URL}\n\n` : ''}${WELCOME_NOTE} A calendar invite is attached.
+${signup ? `${signup} ${signupLink}: ${SITE_URL}\n\n${OPEN_NOTE}\n\n` : ''}${WELCOME_NOTE} A calendar invite is attached.
 
 Unsubscribe: ${unsub}`;
     const html = shell_(heading, when, `
       ${talks.length ? lineupHtml_(talks) : p_('No talks booked yet.')}
-      ${open ? p_(`${openWords} <a href="${SITE_URL}" style="color:#003262">Sign up on the website</a>.`) : ''}
+      ${signup ? p_(`${signup} <a href="${SITE_URL}" style="color:#003262">${signupLink}</a>.`) + p_(`<em>${h_(OPEN_NOTE)}</em>`) : ''}
       ${p_(`${WELCOME_NOTE} A calendar invite is attached.`)}`, unsub);
     send_({ to: email, subject: `${SEMINAR_NAME}: ${fmtLong_(s.date)}`, body: text, htmlBody: html, attachments: [invite] });
   });
@@ -232,11 +236,12 @@ function sendWelcome_(email) {
   send_({
     to: email,
     subject: `You're on the ${SEMINAR_NAME} mailing list`,
-    body: `Thanks for signing up.\n\n${intro} ${when}\n\nSee the schedule or sign up to present: ${SITE_URL}\n\nUnsubscribe: ${unsub}`,
+    body: `Thanks for signing up.\n\n${intro} ${when}\n\nSee the schedule or sign up to present: ${SITE_URL}\n\n${OPEN_NOTE}\n\nUnsubscribe: ${unsub}`,
     htmlBody: shell_("You're on the list", '', `
       ${p_('Thanks for signing up.')}
       ${p_(`${intro} ${h_(when)}`)}
-      ${p_(`<a href="${SITE_URL}" style="color:#003262">See the schedule or sign up to present</a>.`)}`, unsub),
+      ${p_(`<a href="${SITE_URL}" style="color:#003262">See the schedule or sign up to present</a>.`)}
+      ${p_(`<em>${h_(OPEN_NOTE)}</em>`)}`, unsub),
   });
 }
 
