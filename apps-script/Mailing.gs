@@ -3,6 +3,7 @@
 
 // ===== Email config: edit these =====
 const SEMINAR_NAME = 'First-Year Workshop';
+const FROM_NAME = 'Berkeley Econ First-Year Workshop';   // sender name shown in inboxes
 const SITE_URL = 'https://berkeley-firstyearworkshop.github.io/';
 const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbyKSG1n4KbB1eWgaFmqymYPwRdcB93aVjRPO6l-MA5kJSoXVKEyKrJgSS6Xpp-sKFKEKg/exec';  // used for unsubscribe links
 const ROOM = 'Room TBC';
@@ -13,6 +14,8 @@ const SUBSCRIBERS_SHEET = 'Subscribers';
 // ====================================
 
 const TYPE_LABEL = { paper: 'Paper', idea: 'Early idea' };
+const FORMAT_NOTE = 'You have 15 minutes and questions are welcome throughout, so leave some room for them.';
+const WELCOME_NOTE = 'Everyone is welcome to participate!';
 
 // Run once from the editor (and again after changing REMINDER or ANNOUNCE).
 // Each trigger runs daily and only sends when a session is exactly `daysBefore` days away.
@@ -46,33 +49,38 @@ function sendWeeklyAnnouncement() { announce_(null); }
 // ----- Booking confirmation (called from Code.gs), with a calendar invite -----
 function sendBookingConfirmation_(c, time) {
   const tbd = String(c.title).trim().toUpperCase() === 'TBD';
+  const when = `${fmtLong_(c.date)}, ${slotRange_(time)}pm`;
   const invite = ics_({
-    uid: `${c.date}-${hash_(c.email)}-presenter@${SITE_URL.replace(/^https?:\/\//, '').replace(/\/.*$/, '')}`,
+    uid: `${c.date}-${hash_(c.email)}-presenter@${host_()}`,
     date: c.date,
     summary: `${SEMINAR_NAME}: presenting at ${fmt12_(time)}pm`,
     description: `Your slot: ${slotRange_(time)}pm\nTitle: ${c.title}\n\n${SITE_URL}`,
   });
-  MailApp.sendEmail({
-    to: c.email,
-    name: SEMINAR_NAME,
-    subject: `You're presenting on ${fmtLong_(c.date)} at ${fmt12_(time)}pm`,
-    body:
+  const tbdNote = "When you have a title, reply to this email and we'll update the schedule.";
+  const cancelNote = 'If you need to cancel or swap, reply to this email.';
+  const text =
 `Hi ${firstName_(c.name)},
 
 Thanks for signing up to present at the ${SEMINAR_NAME}.
 
-When: ${fmtLong_(c.date)}, ${slotRange_(time)}pm (the session runs ${sessionRange_()})
+When: ${when} (the session runs ${sessionRange_()})
 Where: ${ROOM}
 Title: ${c.title}
 
-${tbd ? "When you have a title, reply to this email and we'll update the schedule.\n\n" : ''}You have 15 minutes and questions are welcome throughout, so leave some room for them. A calendar invite is attached, and we'll send a reminder nearer the time.
+${tbd ? tbdNote + '\n\n' : ''}${FORMAT_NOTE} A calendar invite is attached, and we'll send a reminder nearer the time.
 
-If you need to cancel or swap, reply to this email.
+${cancelNote}
 
 ${SEMINAR_NAME}
-${SITE_URL}`,
-    attachments: [invite],
-  });
+${SITE_URL}`;
+  const html = shell_("You're booked in", `${when}, ${ROOM}`, `
+    ${p_(`Hi ${h_(firstName_(c.name))},`)}
+    ${p_(`Thanks for signing up to present at the ${h_(SEMINAR_NAME)}.`)}
+    ${details_([['When', `${when} (session runs ${sessionRange_()})`], ['Where', ROOM], ['Title', c.title]])}
+    ${tbd ? p_(tbdNote) : ''}
+    ${p_(`${FORMAT_NOTE} A calendar invite is attached, and we'll send a reminder nearer the time.`)}
+    ${p_(cancelNote)}`);
+  send_({ to: c.email, subject: `You're presenting on ${fmtLong_(c.date)} at ${fmt12_(time)}pm`, body: text, htmlBody: html, attachments: [invite] });
 }
 
 // ----- Presenter reminders -----
@@ -83,14 +91,10 @@ function reminders_(testTo) {
   if (!talks.length) return Logger.log('No presenters booked for ' + s.date + '.');
   if (!testTo && !claimSend_('remind_' + s.date)) return;
 
-  const lineup = talks.map(x => `${fmt12_(x.time)}  ${x.booking.name}: ${x.booking.title}`).join('\n');
   talks.forEach(x => {
     const b = x.booking;
-    MailApp.sendEmail({
-      to: testTo || b.email,
-      name: SEMINAR_NAME,
-      subject: `Reminder: you're presenting on ${fmtLong_(s.date)} at ${fmt12_(x.time)}pm`,
-      body:
+    const when = `${fmtLong_(s.date)}, ${slotRange_(x.time)}pm`;
+    const text =
 `Hi ${firstName_(b.name)},
 
 A reminder that you're presenting at the ${SEMINAR_NAME} on ${fmtLong_(s.date)}.
@@ -98,14 +102,22 @@ A reminder that you're presenting at the ${SEMINAR_NAME} on ${fmtLong_(s.date)}.
 Your slot: ${slotRange_(x.time)}pm, ${ROOM}
 Your title: ${b.title}
 
-Full line-up:
-${lineup}
+Full line-up
 
-You have 15 minutes and questions are welcome throughout, so leave some room for them. If you can no longer make it, reply to this email.
+${lineupText_(talks)}
+
+${FORMAT_NOTE} If you can no longer make it, reply to this email.
 
 ${SEMINAR_NAME}
-${SITE_URL}`,
-    });
+${SITE_URL}`;
+    const html = shell_("Reminder: you're presenting soon", `${when}, ${ROOM}`, `
+      ${p_(`Hi ${h_(firstName_(b.name))},`)}
+      ${p_(`A reminder that you're presenting at the ${h_(SEMINAR_NAME)} on ${h_(fmtLong_(s.date))}.`)}
+      ${details_([['Your slot', `${slotRange_(x.time)}pm`], ['Where', ROOM], ['Your title', b.title]])}
+      <h3 style="font-family:Georgia,serif;color:#003262;font-size:17px;margin:24px 0 4px">Full line-up</h3>
+      ${lineupHtml_(talks, x.time)}
+      ${p_(`${FORMAT_NOTE} If you can no longer make it, reply to this email.`)}`);
+    send_({ to: testTo || b.email, subject: `Reminder: you're presenting on ${fmtLong_(s.date)} at ${fmt12_(x.time)}pm`, body: text, htmlBody: html });
   });
 }
 
@@ -127,22 +139,10 @@ function announce_(testTo) {
   const heading = `${ANNOUNCE.daysBefore >= 5 ? 'Next week' : 'This week'} at the ${SEMINAR_NAME}`;
   const open = s.slots.length - talks.length;
   const when = `${fmtLong_(s.date)}, ${sessionRange_()}, ${ROOM}`;
-  const openText = open ? `${open} ${open === 1 ? 'slot is' : 'slots are'} still open. Sign up at ${SITE_URL}` : '';
-
-  const textRows = talks.length
-    ? talks.map(x => `${fmt12_(x.time)}  ${x.booking.title}\n       ${x.booking.name}, ${x.booking.department} (${TYPE_LABEL[x.booking.type] || ''})`).join('\n\n')
-    : 'No talks booked yet.';
-  const htmlRows = talks.map(x => `
-      <tr>
-        <td style="width:1%;padding:10px 16px 10px 0;vertical-align:top;color:#003262;font-weight:600;white-space:nowrap">${fmt12_(x.time)}</td>
-        <td style="padding:10px 0;border-top:1px solid #e3e8ee">
-          <div style="font-weight:600">${h_(x.booking.title)}</div>
-          <div style="color:#5a6773">${h_(x.booking.name)}, ${h_(x.booking.department)} (${TYPE_LABEL[x.booking.type] || ''})</div>
-        </td>
-      </tr>`).join('');
+  const openWords = `${open} ${open === 1 ? 'slot is' : 'slots are'} still open.`;
 
   const invite = ics_({
-    uid: `${s.date}-session@${SITE_URL.replace(/^https?:\/\//, '').replace(/\/.*$/, '')}`,
+    uid: `${s.date}-session@${host_()}`,
     date: s.date,
     summary: SEMINAR_NAME,
     description: (talks.length
@@ -156,25 +156,16 @@ function announce_(testTo) {
 `${heading}
 ${when}
 
-${textRows}
+${talks.length ? lineupText_(talks) : 'No talks booked yet.'}
 
-${openText ? openText + '\n\n' : ''}Everyone is welcome to come and listen. A calendar invite is attached.
+${open ? `${openWords} Sign up at ${SITE_URL}\n\n` : ''}${WELCOME_NOTE} A calendar invite is attached.
 
 Unsubscribe: ${unsub}`;
-    const html = `
-<div style="font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;color:#15212c;max-width:560px;line-height:1.5">
-  <h2 style="font-family:Georgia,serif;color:#003262;margin:0 0 4px">${h_(heading)}</h2>
-  <p style="margin:0 0 16px;color:#5a6773">${h_(when)}</p>
-  ${talks.length ? `<table style="border-collapse:collapse;width:100%">${htmlRows}</table>` : '<p>No talks booked yet.</p>'}
-  ${open ? `<p style="margin:20px 0">${open} ${open === 1 ? 'slot is' : 'slots are'} still open. <a href="${SITE_URL}" style="color:#003262">Sign up on the website</a>.</p>` : ''}
-  <p style="margin:20px 0">Everyone is welcome to come and listen. A calendar invite is attached.</p>
-  <p style="font-size:12px;color:#8a96a3;margin-top:32px"><a href="${unsub}" style="color:#8a96a3">Unsubscribe</a></p>
-</div>`;
-    MailApp.sendEmail({
-      to: email, name: SEMINAR_NAME,
-      subject: `${SEMINAR_NAME}: ${fmtLong_(s.date)}`,
-      body: text, htmlBody: html, attachments: [invite],
-    });
+    const html = shell_(heading, when, `
+      ${talks.length ? lineupHtml_(talks) : p_('No talks booked yet.')}
+      ${open ? p_(`${openWords} <a href="${SITE_URL}" style="color:#003262">Sign up on the website</a>.`) : ''}
+      ${p_(`${WELCOME_NOTE} A calendar invite is attached.`)}`, unsub);
+    send_({ to: email, subject: `${SEMINAR_NAME}: ${fmtLong_(s.date)}`, body: text, htmlBody: html, attachments: [invite] });
   });
 }
 
@@ -199,18 +190,17 @@ function subscribe_(d) {
 }
 
 function sendWelcome_(email) {
-  MailApp.sendEmail({
+  const unsub = unsubscribeLink_(email);
+  const intro = "Before each session you'll get an email with who's presenting and a calendar invite.";
+  const when = `Sessions are on Wednesdays, ${sessionRange_()}, ${ROOM}.`;
+  send_({
     to: email,
-    name: SEMINAR_NAME,
     subject: `You're on the ${SEMINAR_NAME} mailing list`,
-    body:
-`Thanks for signing up.
-
-Before each session you'll get an email with who's presenting and a calendar invite. Sessions are on Wednesdays, ${sessionRange_()}, ${ROOM}.
-
-See the schedule or sign up to present: ${SITE_URL}
-
-Unsubscribe: ${unsubscribeLink_(email)}`,
+    body: `Thanks for signing up.\n\n${intro} ${when}\n\nSee the schedule or sign up to present: ${SITE_URL}\n\nUnsubscribe: ${unsub}`,
+    htmlBody: shell_("You're on the list", '', `
+      ${p_('Thanks for signing up.')}
+      ${p_(`${intro} ${h_(when)}`)}
+      ${p_(`<a href="${SITE_URL}" style="color:#003262">See the schedule or sign up to present</a>.`)}`, unsub),
   });
 }
 
@@ -278,7 +268,51 @@ function ics_(o) {
   return Utilities.newBlob(lines.map(fold).join('\r\n') + '\r\n', 'text/calendar', 'first-year-workshop.ics');
 }
 
+// ----- Email building blocks -----
+function send_(o) { MailApp.sendEmail(Object.assign({ name: FROM_NAME }, o)); }
+
+function shell_(heading, sub, inner, unsub) {
+  return `
+<div style="font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;color:#15212c;max-width:560px;line-height:1.5">
+  <h2 style="font-family:Georgia,serif;color:#003262;margin:0 0 4px">${h_(heading)}</h2>
+  ${sub ? `<p style="margin:0 0 16px;color:#5a6773">${h_(sub)}</p>` : ''}
+  ${inner}
+  <p style="font-size:12px;color:#8a96a3;margin-top:32px">
+    <a href="${SITE_URL}" style="color:#8a96a3">${h_(SITE_URL.replace(/^https?:\/\//, '').replace(/\/$/, ''))}</a>
+    ${unsub ? ` &nbsp;|&nbsp; <a href="${unsub}" style="color:#8a96a3">Unsubscribe</a>` : ''}
+  </p>
+</div>`;
+}
+const p_ = html => `<p style="margin:16px 0">${html}</p>`;
+
+function details_(rows) {
+  return `<table style="border-collapse:collapse;margin:16px 0">${rows.map(([k, v]) => `
+    <tr><td style="padding:4px 16px 4px 0;color:#5a6773;vertical-align:top;white-space:nowrap">${h_(k)}</td>
+    <td style="padding:4px 0;font-weight:600">${h_(v)}</td></tr>`).join('')}</table>`;
+}
+
+// mine: highlight that slot's row (used in presenter reminders)
+function lineupHtml_(talks, mine) {
+  return `<table style="border-collapse:collapse;width:100%">${talks.map(x => {
+    const b = x.booking;
+    const you = x.time === mine;
+    return `
+    <tr${you ? ' style="background:#fff7df"' : ''}>
+      <td style="width:1%;padding:10px 16px 10px 8px;vertical-align:top;color:#003262;font-weight:600;white-space:nowrap;border-top:1px solid #e3e8ee">${fmt12_(x.time)}</td>
+      <td style="padding:10px 8px 10px 0;border-top:1px solid #e3e8ee">
+        <div style="font-weight:600">${h_(b.title)}</div>
+        <div style="color:#5a6773">${h_(b.name)}, ${h_(b.department)} (${TYPE_LABEL[b.type] || ''})${you ? ' &nbsp;<strong style="color:#003262">You</strong>' : ''}</div>
+      </td>
+    </tr>`;
+  }).join('')}</table>`;
+}
+
+function lineupText_(talks) {
+  return talks.map(x => `${fmt12_(x.time)}  ${x.booking.title}\n       ${x.booking.name}, ${x.booking.department} (${TYPE_LABEL[x.booking.type] || ''})`).join('\n\n');
+}
+
 // ----- Helpers -----
+const host_ = () => SITE_URL.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
 function sessionData_(date) {
   const rows = readBookings_(getSheet_());
   return {
