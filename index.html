@@ -75,6 +75,8 @@
   .programme .who { display: block; color: var(--hero-muted); font-size: .875rem; }
   .programme .take { background: none; border: 0; padding: 0; font: inherit; color: #fff; text-decoration: underline; text-decoration-color: var(--gold); text-underline-offset: 3px; cursor: pointer; text-align: left; }
   .programme .take:hover { color: var(--gold); }
+  .programme .res { color: #fff; font-size: .875rem; text-decoration-color: var(--gold); text-underline-offset: 3px; }
+  .programme .res:hover { color: var(--gold); }
 
   /* Sections */
   .section { padding: 5.5rem 0; }
@@ -113,6 +115,7 @@
   .booked strong { font-weight: 600; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
   .booked span { color: var(--booked-muted); }
   .booked .kind { margin-top: auto; font-size: .75rem; }
+  .booked .res { color: var(--booked-ink); font-size: .8rem; text-underline-offset: 2px; align-self: flex-start; }
   .open { background: var(--open); border: 1.5px dashed var(--line); color: var(--muted); cursor: pointer; justify-content: center; align-items: center; font-weight: 500; }
   .open:hover, .open:focus-visible { border-style: solid; border-color: var(--accent); color: var(--accent); }
   .open .b, .open:hover .a, .open:focus-visible .a { display: none; }
@@ -152,7 +155,7 @@
   dialog::backdrop { background: rgba(0, 30, 55, .5); }
   /* Safari before 15.4 has no <dialog>: hide it until opened, then float it over the page. */
   dialog:not([open]) { display: none; }
-  .no-modal { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 30; }
+  .no-modal { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 30; max-height: calc(100% - 2rem); overflow: auto; }
   dialog form { padding: 1.5rem; display: grid; gap: .9rem; }
   dialog form h2 { font: 600 1.5rem/1.2 var(--serif); margin: 0; }
   .when { margin: -.5rem 0 .25rem; color: var(--muted); }
@@ -164,6 +167,9 @@
   legend { font-weight: 500; font-size: .9rem; margin-bottom: .35rem; }
   label.radio { display: flex; align-items: center; gap: .5rem; font-weight: 400; font-size: 1rem; }
   .error { color: var(--error); margin: 0; font-size: .9rem; }
+  /* label and .more set display, which would otherwise override [hidden]. */
+  dialog [hidden] { display: none; }
+  .more { display: grid; gap: .9rem; }
   .actions { display: flex; justify-content: flex-end; gap: .5rem; margin-top: .25rem; }
   .actions button { font: 600 .95rem var(--sans); padding: .6rem 1.1rem; border-radius: 4px; cursor: pointer; }
   .primary { background: var(--booked); color: #fff; border: 0; }
@@ -342,6 +348,21 @@
       <label class="radio"><input type="radio" name="type" value="paper" required> A paper or draft</label>
       <label class="radio"><input type="radio" name="type" value="idea"> An early-stage idea</label>
     </fieldset>
+    <fieldset>
+      <legend>Would you like to share a draft, slides or a data source?</legend>
+      <label class="radio"><input type="radio" name="hasLink" value="no" checked> Not now</label>
+      <label class="radio"><input type="radio" name="hasLink" value="yes"> Yes, add a link</label>
+    </fieldset>
+    <div class="more" id="linkFields" hidden>
+      <label>Link <input name="link" type="url" required maxlength="500" placeholder="https://" disabled></label>
+      <label>What is it?
+        <select name="linkType" required disabled>
+          <option value="" disabled selected>Choose one</option>
+          <option>Draft</option><option>Slides</option><option>Data source</option><option>Other</option>
+        </select>
+      </label>
+      <label id="linkOtherWrap" hidden>Describe it <input name="linkOther" required maxlength="40" placeholder="e.g. Code, poster" disabled></label>
+    </div>
     <p class="error" id="formError" role="alert" hidden></p>
     <div class="actions">
       <button type="button" class="secondary" id="cancel">Cancel</button>
@@ -383,6 +404,11 @@ const fmtTime = t => { const [h, m] = t.split(':').map(Number); return `${h % 12
 const range = t => `${fmtTime(t)}-${fmtTime(addMin(t, 15))}`;
 const longDate = iso => fmtDate(iso, { weekday: 'long', day: 'numeric', month: 'long' });
 const nextFree = s => s.slots.find(x => !x.booking);
+const titleText = t => (String(t).trim().toUpperCase() === 'TBD' ? 'Title TBD' : t);
+// Only http(s) links become hrefs, whatever the sheet contains.
+const resLink = b => (/^https?:\/\//i.test(b.link || '')
+  ? `<a class="res" href="${esc(b.link)}" target="_blank" rel="noopener noreferrer" aria-label="${esc(b.linkType)}: ${esc(titleText(b.title))} (opens in a new tab)">${esc(b.linkType || 'Link')}</a>`
+  : '');
 const isOver = (s, now) => s.date < now.date || (s.date === now.date && addMin(s.slots[s.slots.length - 1].time, 15) <= now.time);
 
 function weekHTML(s, { past = false, next = false } = {}) {
@@ -393,7 +419,7 @@ function weekHTML(s, { past = false, next = false } = {}) {
     const b = slot.booking;
     const t = `<span class="t">${range(slot.time)}</span>`;
     if (b) {
-      return `<div class="cell booked">${t}<strong>${esc(b.title)}</strong><span>${esc(b.name)}, ${esc(b.department)}</span>
+      return `<div class="cell booked">${t}<strong>${esc(titleText(b.title))}</strong><span>${esc(b.name)}, ${esc(b.department)}</span>${resLink(b)}
         <span class="kind kind-${b.type === 'idea' ? 'idea' : 'paper'}">${TYPE[b.type] || ''}</span></div>`;
     }
     if (past) return `<div class="cell empty">${t}<span>No talk</span></div>`;
@@ -419,7 +445,7 @@ function renderProgramme(n) {
   const rows = n.slots.map(slot => {
     const b = slot.booking;
     const body = b
-      ? `<span class="ttl">${esc(b.title)}</span><span class="who">${esc(b.name)}, ${esc(b.department)}</span>`
+      ? `<span class="ttl">${esc(titleText(b.title))}</span><span class="who">${esc(b.name)}, ${esc(b.department)}</span>${resLink(b)}`
       : slot === free
         ? `<button class="take" data-date="${n.date}">Open slot. Sign up</button>`
         : `<span class="later">Open</span>`;
@@ -518,16 +544,29 @@ function syncTbd() {
 }
 $('tbd').addEventListener('change', syncTbd);
 
+// Hidden link fields are disabled so they skip validation and stay out of the payload.
+function syncLink() {
+  const f = $('form').elements;
+  const on = f.hasLink.value === 'yes';
+  const other = on && f.linkType.value === 'Other';
+  $('linkFields').hidden = !on;
+  f.link.disabled = f.linkType.disabled = !on;
+  $('linkOtherWrap').hidden = !other;
+  f.linkOther.disabled = !other;
+}
+$('form').addEventListener('change', syncLink);
+
 $('form').addEventListener('submit', async e => {
   e.preventDefault();
   const form = e.target;
   if (!form.checkValidity()) {
     const bad = form.querySelector(':invalid');
-    showError(bad.type === 'email' ? 'Enter a valid email address.' : 'Fill in every field.');
+    showError(bad.type === 'email' ? 'Enter a valid email address.' : bad.type === 'url' ? 'Enter a full link, starting with https://' : 'Fill in every field.');
     return bad.focus();
   }
   const payload = { ...Object.fromEntries(new FormData(form)), date: current.date };
   if ($('tbd').checked) payload.title = 'TBD';
+  if (payload.linkType === 'Other') payload.linkType = payload.linkOther;
   const btn = $('submit');
   btn.disabled = true; btn.textContent = 'Signing up…';
   try {
@@ -541,6 +580,7 @@ $('form').addEventListener('submit', async e => {
     closeDialog();
     form.reset();
     syncTbd();
+    syncLink();
     toast(`Signed up for ${fmtDate(current.date, { weekday: 'short', day: 'numeric', month: 'short' })}, ${range(d.slot.time)}pm.`);
   } catch (err) {
     showError('Your sign-up did not go through. Check your connection and try again.');
@@ -588,18 +628,18 @@ function demoSessions() {
     [0, 'Tom K.', 'ARE', 'Groundwater pricing in the Central Valley', 'idea'],
     [0, 'Priya S.', 'Haas', 'Analyst herding after earnings surprises', 'paper'],
     [1, 'Jonas B.', 'Econ', 'Monetary policy and small-firm credit', 'paper'],
-    [2, 'Lucía G.', 'Haas', 'Do stablecoin runs look like bank runs?', 'idea'],
-    [2, 'Sam P.', 'Econ', 'Firm entry after minimum wage changes', 'paper'],
+    [2, 'Lucía G.', 'Haas', 'Do stablecoin runs look like bank runs?', 'idea', 'https://example.com/slides.pdf', 'Slides'],
+    [2, 'Sam P.', 'Econ', 'TBD', 'paper'],
     [2, 'Ade O.', 'Econ', 'Remittances and informal credit in Nigeria', 'idea'],
     [3, 'Chen W.', 'ARE', 'Crop insurance take-up and weather shocks', 'paper'],
   ];
-  sample.forEach(([w, name, department, title, type]) => { nextFree(out[w]).booking = { name, department, title, type }; });
+  sample.forEach(([w, name, department, title, type, link, linkType]) => { nextFree(out[w]).booking = { name, department, title, type, link, linkType }; });
   return out;
 }
 function demoBook(p) {
   const slot = nextFree(sessions.find(s => s.date === p.date));
   if (!slot) return { ok: false, error: 'This session just filled up. Pick another week.' };
-  slot.booking = { name: p.name, department: p.department, title: p.title, type: p.type };
+  slot.booking = { name: p.name, department: p.department, title: p.title, type: p.type, link: p.link, linkType: p.linkType };
   return { ok: true, slot, sessions };
 }
 

@@ -11,6 +11,7 @@ const REMINDER = { daysBefore: 2, hour: 9 };    // presenters: Monday 9am before
 const ANNOUNCE = { daysBefore: 6, hour: 10 };   // mailing list: Thursday 10am the week before
 const SKIP_EMPTY_WEEKS = true;                  // no list email when nobody has signed up
 const SUBSCRIBERS_SHEET = 'Subscribers';
+const ADMIN_EMAIL = 'berkeleyfirstyearworkshop@gmail.com';                         // gets a note for every sign-up; '' = the account running the script
 // ====================================
 
 const TYPE_LABEL = { paper: 'Paper', idea: 'Early idea' };
@@ -38,6 +39,7 @@ function testEmails() {
     ? { date: s.date, name: booked.booking.name, email: me, title: booked.booking.title }
     : { date: s.date, name: 'Test Presenter', email: me, title: 'TBD' };
   sendBookingConfirmation_(sample, booked ? booked.time : SLOT_TIMES[0]);
+  sendAdminNotice_(Object.assign({ department: 'Econ', type: 'paper' }, sample), booked ? booked.time : SLOT_TIMES[0], me);
   sendWelcome_(me);
   reminders_(me);
   announce_(me);
@@ -66,7 +68,7 @@ Thanks for signing up to present at the ${SEMINAR_NAME}.
 When: ${when} (the session runs ${sessionRange_()})
 Where: ${ROOM}
 Title: ${c.title}
-
+${c.link ? `${c.linkType}: ${c.link}\n` : ''}
 ${tbd ? tbdNote + '\n\n' : ''}${FORMAT_NOTE} A calendar invite is attached, and we'll send a reminder nearer the time.
 
 ${cancelNote}
@@ -76,11 +78,32 @@ ${SITE_URL}`;
   const html = shell_("You're booked in", `${when}, ${ROOM}`, `
     ${p_(`Hi ${h_(firstName_(c.name))},`)}
     ${p_(`Thanks for signing up to present at the ${h_(SEMINAR_NAME)}.`)}
-    ${details_([['When', `${when} (session runs ${sessionRange_()})`], ['Where', ROOM], ['Title', c.title]])}
+    ${details_([['When', `${when} (session runs ${sessionRange_()})`], ['Where', ROOM], ['Title', c.title]].concat(c.link ? [[c.linkType, linkHtml_(c), true]] : []))}
     ${tbd ? p_(tbdNote) : ''}
     ${p_(`${FORMAT_NOTE} A calendar invite is attached, and we'll send a reminder nearer the time.`)}
     ${p_(cancelNote)}`);
   send_({ to: c.email, subject: `You're presenting on ${fmtLong_(c.date)} at ${fmt12_(time)}pm`, body: text, htmlBody: html, attachments: [invite] });
+}
+
+// ----- Sign-up notice to the organisers (called from Code.gs). Replying goes to the presenter. -----
+function sendAdminNotice_(c, time, to) {
+  const text =
+`${c.name} signed up to present.
+
+When: ${fmtLong_(c.date)}, ${slotRange_(time)}pm
+Name: ${c.name}
+Email: ${c.email}
+Department: ${c.department}
+Title: ${c.title}
+Type: ${TYPE_LABEL[c.type] || c.type}
+${c.link ? `Link: ${c.linkType}, ${c.link}\n` : ''}
+Bookings sheet: ${SpreadsheetApp.getActiveSpreadsheet().getUrl()}`;
+  send_({
+    to: to || ADMIN_EMAIL || Session.getEffectiveUser().getEmail(),
+    replyTo: c.email,
+    subject: `New sign-up: ${c.name}, ${fmtLong_(c.date)} at ${fmt12_(time)}pm`,
+    body: text,
+  });
 }
 
 // ----- Presenter reminders -----
@@ -100,7 +123,7 @@ function reminders_(testTo) {
 A reminder that you're presenting at the ${SEMINAR_NAME} on ${fmtLong_(s.date)}.
 
 Your slot: ${slotRange_(x.time)}pm, ${ROOM}
-Your title: ${b.title}
+Your title: ${titleText_(b.title)}
 
 Full line-up
 
@@ -113,7 +136,7 @@ ${SITE_URL}`;
     const html = shell_("Reminder: you're presenting soon", `${when}, ${ROOM}`, `
       ${p_(`Hi ${h_(firstName_(b.name))},`)}
       ${p_(`A reminder that you're presenting at the ${h_(SEMINAR_NAME)} on ${h_(fmtLong_(s.date))}.`)}
-      ${details_([['Your slot', `${slotRange_(x.time)}pm`], ['Where', ROOM], ['Your title', b.title]])}
+      ${details_([['Your slot', `${slotRange_(x.time)}pm`], ['Where', ROOM], ['Your title', titleText_(b.title)]])}
       <h3 style="font-family:Georgia,serif;color:#003262;font-size:17px;margin:24px 0 4px">Full line-up</h3>
       ${lineupHtml_(talks, x.time)}
       ${p_(`${FORMAT_NOTE} If you can no longer make it, reply to this email.`)}`);
@@ -146,7 +169,7 @@ function announce_(testTo) {
     date: s.date,
     summary: SEMINAR_NAME,
     description: (talks.length
-      ? talks.map(x => `${fmt12_(x.time)} ${x.booking.name}: ${x.booking.title}`).join('\n')
+      ? talks.map(x => `${fmt12_(x.time)} ${x.booking.name}: ${titleText_(x.booking.title)}`).join('\n')
       : 'Line-up to be confirmed.') + `\n\n${SITE_URL}`,
   });
 
@@ -286,9 +309,9 @@ function shell_(heading, sub, inner, unsub) {
 const p_ = html => `<p style="margin:16px 0">${html}</p>`;
 
 function details_(rows) {
-  return `<table style="border-collapse:collapse;margin:16px 0">${rows.map(([k, v]) => `
+  return `<table style="border-collapse:collapse;margin:16px 0">${rows.map(([k, v, html]) => `
     <tr><td style="padding:4px 16px 4px 0;color:#5a6773;vertical-align:top;white-space:nowrap">${h_(k)}</td>
-    <td style="padding:4px 0;font-weight:600">${h_(v)}</td></tr>`).join('')}</table>`;
+    <td style="padding:4px 0;font-weight:600">${html ? v : h_(v)}</td></tr>`).join('')}</table>`;
 }
 
 // mine: highlight that slot's row (used in presenter reminders)
@@ -300,15 +323,20 @@ function lineupHtml_(talks, mine) {
     <tr${you ? ' style="background:#fff7df"' : ''}>
       <td style="width:1%;padding:10px 16px 10px 8px;vertical-align:top;color:#003262;font-weight:600;white-space:nowrap;border-top:1px solid #e3e8ee">${fmt12_(x.time)}</td>
       <td style="padding:10px 8px 10px 0;border-top:1px solid #e3e8ee">
-        <div style="font-weight:600">${h_(b.title)}</div>
+        <div style="font-weight:600">${h_(titleText_(b.title))}</div>
         <div style="color:#5a6773">${h_(b.name)}, ${h_(b.department)} (${TYPE_LABEL[b.type] || ''})${you ? ' &nbsp;<strong style="color:#003262">You</strong>' : ''}</div>
+        ${b.link ? `<div>${linkHtml_(b)}</div>` : ''}
       </td>
     </tr>`;
   }).join('')}</table>`;
 }
 
 function lineupText_(talks) {
-  return talks.map(x => `${fmt12_(x.time)}  ${x.booking.title}\n       ${x.booking.name}, ${x.booking.department} (${TYPE_LABEL[x.booking.type] || ''})`).join('\n\n');
+  return talks.map(x => {
+    const b = x.booking;
+    return `${fmt12_(x.time)}  ${titleText_(b.title)}\n       ${b.name}, ${b.department} (${TYPE_LABEL[b.type] || ''})` +
+      (b.link ? `\n       ${b.linkType}: ${b.link}` : '');
+  }).join('\n\n');
 }
 
 // ----- Helpers -----
@@ -345,6 +373,8 @@ const fmt12_ = t => { const [h, m] = t.split(':').map(Number); return `${h % 12 
 const slotRange_ = t => `${fmt12_(t)}-${fmt12_(addMin_(t, 15))}`;
 const sessionRange_ = () => `${fmt12_(SLOT_TIMES[0])}-${fmt12_(sessionEnd_())}pm`;
 const fmtLong_ = iso => Utilities.formatDate(new Date(iso + 'T12:00:00Z'), 'UTC', 'EEEE d MMMM');
+const titleText_ = t => (String(t).trim().toUpperCase() === 'TBD' ? 'Title TBD' : t);
+const linkHtml_ = b => `<a href="${h_(b.link)}" style="color:#003262">${h_(b.linkType)}</a>`;
 const firstName_ = n => String(n).trim().split(/\s+/)[0];
 const hash_ = s => Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, s)).slice(0, 10);
 const h_ = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));

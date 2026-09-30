@@ -9,7 +9,7 @@ const TZ = 'America/Los_Angeles';
 const SHEET_NAME = 'Bookings';
 // ==============================
 
-const HEADERS = ['slot_id', 'date', 'time', 'name', 'email', 'department', 'title', 'type', 'booked_at'];
+const HEADERS = ['slot_id', 'date', 'time', 'name', 'email', 'department', 'title', 'type', 'booked_at', 'link', 'link_type'];
 
 function doGet(e) {
   if (e && e.parameter && e.parameter.action === 'unsubscribe') return unsubscribePage_(e.parameter);
@@ -51,7 +51,10 @@ function doPost(e) {
       department: str_(d.department, 60),
       title: str_(d.title, 200),
       type: str_(d.type, 10),
+      link: str_(d.link, 500),
+      linkType: str_(d.linkType, 40),
     };
+    if (!clean.link) clean.linkType = '';
 
     const error = validate_(clean);
     if (error) return json_({ ok: false, error: error });
@@ -76,10 +79,11 @@ function doPost(e) {
     const id = slotId_(clean.date, time);
     sheet.appendRow([
       id, clean.date, time,
-      safe_(clean.name), clean.email, safe_(clean.department), safe_(clean.title), clean.type, new Date(),
+      safe_(clean.name), clean.email, safe_(clean.department), safe_(clean.title), clean.type, new Date(), clean.link, safe_(clean.linkType),
     ]);
     clearCache_();
     trySend_(() => sendBookingConfirmation_(clean, time)); // see Mailing.gs
+    trySend_(() => sendAdminNotice_(clean, time));
     return json_({ ok: true, slot: { id: id, time: time }, sessions: buildSessions_() });
   } finally {
     lock.releaseLock();
@@ -97,13 +101,15 @@ function validate_(c) {
   if (!c.department) return 'Choose your department.';
   if (!c.title) return 'Add a working title.';
   if (c.type !== 'paper' && c.type !== 'idea') return 'Choose paper or early-stage idea.';
+  if (c.link && !isLink_(c.link)) return 'Enter a full link, starting with https://';
+  if (c.link && !c.linkType) return 'Say what the link is.';
   return null;
 }
 
 function buildSessions_() {
   const booked = {};
   readBookings_(getSheet_()).forEach(r => {
-    booked[r.slot_id] = { name: r.name, department: r.department, title: r.title, type: r.type };
+    booked[r.slot_id] = { name: r.name, department: r.department, title: r.title, type: r.type, link: r.link, linkType: r.linkType };
   });
   // Emails stay in the sheet and are never returned to the page.
   return sessionDates_().map(date => ({
@@ -140,6 +146,8 @@ function readBookings_(sheet) {
       department: String(r[5]),
       title: String(r[6]),
       type: String(r[7]),
+      link: isLink_(String(r[9]).trim()) ? String(r[9]).trim() : '',
+      linkType: String(r[10]),
     }))
     .filter(r => r.slot_id);
 }
@@ -157,6 +165,8 @@ function getSheet_() {
 
 const slotId_ = (date, t) => date + '_' + t.replace(':', '');
 const today_ = () => Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd');
+// Only http(s): the link becomes an href on the page and in emails.
+const isLink_ = u => /^https?:\/\/\S+$/i.test(u);
 const str_ = (v, max) => String(v == null ? '' : v).trim().slice(0, max);
 // Stop user input being interpreted as a spreadsheet formula.
 const safe_ = v => (/^[=+\-@]/.test(v) ? "'" + v : v);
