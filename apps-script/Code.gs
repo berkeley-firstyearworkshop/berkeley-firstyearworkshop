@@ -1,7 +1,7 @@
 // ===== Config: edit these =====
 const START_DATE = '2026-10-21';            // first Wednesday (YYYY-MM-DD)
 const END_DATE   = '2026-12-02';            // last Wednesday
-const SKIP_DATES = ['2026-11-25'];          // weeks with no session
+const SKIP_DATES = ['2026-11-11', '2026-11-25']; // weeks with no session (Veterans Day, Thanksgiving)
 const SLOT_TIMES = ['15:00', '15:15', '15:30', '15:45'];
 const ALLOWED_EMAIL_DOMAIN = '';            // e.g. 'berkeley.edu' to restrict sign-ups; '' allows any
 const MAX_UPCOMING_PER_EMAIL = 1;           // max future slots one person can hold; 0 = no limit
