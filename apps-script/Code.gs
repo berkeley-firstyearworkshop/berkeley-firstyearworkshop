@@ -13,7 +13,7 @@ const HEADERS = ['slot_id', 'date', 'time', 'name', 'email', 'department', 'titl
 
 function doGet(e) {
   if (e && e.parameter && e.parameter.action === 'unsubscribe') return unsubscribePage_(e.parameter);
-  return json_({ ok: true, sessions: cachedSessions_() });
+  return json_({ ok: true, now: Date.now(), sessions: cachedSessions_() });
 }
 
 // The schedule is cached for up to 10 minutes so most visits skip reading the Sheet.

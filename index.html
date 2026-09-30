@@ -150,6 +150,9 @@
   /* Dialog */
   dialog { border: 0; border-radius: 8px; padding: 0; width: calc(100% - 2rem); max-width: 30rem; background: var(--bg); color: var(--ink); box-shadow: 0 20px 50px rgba(0, 20, 40, .3); }
   dialog::backdrop { background: rgba(0, 30, 55, .5); }
+  /* Safari before 15.4 has no <dialog>: hide it until opened, then float it over the page. */
+  dialog:not([open]) { display: none; }
+  .no-modal { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 30; }
   dialog form { padding: 1.5rem; display: grid; gap: .9rem; }
   dialog form h2 { font: 600 1.5rem/1.2 var(--serif); margin: 0; }
   .when { margin: -.5rem 0 .25rem; color: var(--muted); }
@@ -363,13 +366,24 @@ let current = null;
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const todayISO = () => new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(new Date());
-const fmtDate = (iso, opts) => new Date(iso + 'T12:00:00').toLocaleDateString('en-GB', opts);
+// Dates are built from numeric parts, never from a locale's default format or a parsed string: Safari differs on both.
+const ymd = (y, m, d) => `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+// Server clock minus device clock, so "now" doesn't depend on the visitor's clock being right.
+let clockSkew = 0;
+const nowLA = () => {
+  const p = {};
+  new Intl.DateTimeFormat('en-US', { timeZone: TZ, year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', hourCycle: 'h23' })
+    .formatToParts(new Date(Date.now() + clockSkew)).forEach(x => { p[x.type] = x.value; });
+  // % 24: some engines report midnight as hour 24 despite h23.
+  return { date: ymd(p.year, p.month, p.day), time: `${String(p.hour % 24).padStart(2, '0')}:${String(p.minute).padStart(2, '0')}` };
+};
+const fmtDate = (iso, opts) => { const [y, m, d] = iso.split('-').map(Number); return new Date(y, m - 1, d, 12).toLocaleDateString('en-GB', opts); };
 const addMin = (t, n) => { let [h, m] = t.split(':').map(Number); m += n; h += Math.floor(m / 60); m %= 60; return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`; };
 const fmtTime = t => { const [h, m] = t.split(':').map(Number); return `${h % 12 || 12}:${String(m).padStart(2, '0')}`; };
 const range = t => `${fmtTime(t)}-${fmtTime(addMin(t, 15))}`;
 const longDate = iso => fmtDate(iso, { weekday: 'long', day: 'numeric', month: 'long' });
 const nextFree = s => s.slots.find(x => !x.booking);
+const isOver = (s, now) => s.date < now.date || (s.date === now.date && addMin(s.slots[s.slots.length - 1].time, 15) <= now.time);
 
 function weekHTML(s, { past = false, next = false } = {}) {
   const times = [...s.slots.map(x => x.time), addMin(s.slots[s.slots.length - 1].time, 15)];
@@ -416,9 +430,9 @@ function renderProgramme(n) {
 }
 
 function render() {
-  const today = todayISO();
-  const upcoming = sessions.filter(s => s.date >= today);
-  const past = sessions.filter(s => s.date < today).reverse();
+  const now = nowLA();
+  const upcoming = sessions.filter(s => !isOver(s, now));
+  const past = sessions.filter(s => isOver(s, now)).reverse();
   renderProgramme(upcoming[0]);
   if (tab === 'upcoming') {
     $('weeks').innerHTML = upcoming.length
@@ -444,6 +458,7 @@ async function load() {
   try {
     const d = await (await fetch(API_URL)).json();
     if (!d.ok) throw new Error(d.error);
+    if (d.now) clockSkew = d.now - Date.now();
     setSessions(d.sessions);
   } catch (e) {
     if (cached) return;
@@ -467,7 +482,12 @@ function openDialog(date) {
   current = s;
   $('dlgWhen').textContent = `${longDate(s.date)}, ${range(slot.time)}pm`;
   $('formError').hidden = true;
-  $('signup').showModal();
+  const dlg = $('signup');
+  if (dlg.showModal) dlg.showModal(); else { dlg.classList.add('no-modal'); dlg.setAttribute('open', ''); }
+}
+function closeDialog() {
+  const dlg = $('signup');
+  if (dlg.close) dlg.close(); else dlg.removeAttribute('open');
 }
 
 function showError(msg) { $('formError').textContent = msg; $('formError').hidden = false; }
@@ -483,7 +503,7 @@ document.addEventListener('click', e => {
   const btn = e.target.closest('button[data-date]');
   if (btn) openDialog(btn.dataset.date);
 });
-$('cancel').addEventListener('click', () => $('signup').close());
+$('cancel').addEventListener('click', closeDialog);
 document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => {
   tab = b.dataset.tab;
   document.querySelectorAll('.tabs button').forEach(x => x.setAttribute('aria-selected', String(x === b)));
@@ -518,7 +538,7 @@ $('form').addEventListener('submit', async e => {
     })).json();
     if (d.sessions) DEMO ? render() : setSessions(d.sessions);
     if (!d.ok) return showError(d.error);
-    $('signup').close();
+    closeDialog();
     form.reset();
     syncTbd();
     toast(`Signed up for ${fmtDate(current.date, { weekday: 'short', day: 'numeric', month: 'short' })}, ${range(d.slot.time)}pm.`);
@@ -559,7 +579,7 @@ function demoSessions() {
   d.setDate(d.getDate() + ((3 - d.getDay() + 7) % 7) - 14);
   const out = [];
   for (let i = 0; i < 9; i++) {
-    const iso = d.toLocaleDateString('en-CA');
+    const iso = ymd(d.getFullYear(), d.getMonth() + 1, d.getDate());
     out.push({ date: iso, slots: ['15:00', '15:15', '15:30', '15:45'].map(t => ({ id: `${iso}_${t.replace(':', '')}`, time: t, booking: null })) });
     d.setDate(d.getDate() + 7);
   }
