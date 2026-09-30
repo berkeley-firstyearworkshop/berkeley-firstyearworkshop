@@ -38,7 +38,7 @@ function testEmails() {
   const sample = booked
     ? { date: s.date, name: booked.booking.name, email: me, title: booked.booking.title }
     : { date: s.date, name: 'Test Presenter', email: me, title: 'TBD' };
-  sendBookingConfirmation_(sample, booked ? booked.time : SLOT_TIMES[0]);
+  sendBookingConfirmation_(sample, booked ? booked.time : SLOT_TIMES[0], true);
   sendAdminNotice_(Object.assign({ department: 'Econ', type: 'paper' }, sample), booked ? booked.time : SLOT_TIMES[0], me);
   sendWelcome_(me);
   reminders_(me);
@@ -49,7 +49,8 @@ function sendPresenterReminders() { reminders_(null); }
 function sendWeeklyAnnouncement() { announce_(null); }
 
 // ----- Booking confirmation (called from Code.gs), with a calendar invite -----
-function sendBookingConfirmation_(c, time) {
+// joinedList: they were just added to the mailing list, so say so and give them a way out.
+function sendBookingConfirmation_(c, time, joinedList) {
   const tbd = String(c.title).trim().toUpperCase() === 'TBD';
   const when = `${fmtLong_(c.date)}, ${slotRange_(time)}pm`;
   const invite = ics_({
@@ -60,6 +61,8 @@ function sendBookingConfirmation_(c, time) {
   });
   const tbdNote = "When you have a title, reply to this email and we'll update the schedule.";
   const cancelNote = 'If you need to cancel or swap, reply to this email.';
+  const listNote = "We've also added you to the mailing list, which sends the line-up before each session.";
+  const unsub = joinedList ? unsubscribeLink_(c.email) : '';
   const text =
 `Hi ${firstName_(c.name)},
 
@@ -73,7 +76,7 @@ ${tbd ? tbdNote + '\n\n' : ''}${FORMAT_NOTE} A calendar invite is attached, and 
 
 ${cancelNote}
 
-${SEMINAR_NAME}
+${joinedList ? `${listNote} Unsubscribe: ${unsub}\n\n` : ''}${SEMINAR_NAME}
 ${SITE_URL}`;
   const html = shell_("You're booked in", `${when}, ${ROOM}`, `
     ${p_(`Hi ${h_(firstName_(c.name))},`)}
@@ -81,7 +84,8 @@ ${SITE_URL}`;
     ${details_([['When', `${when} (session runs ${sessionRange_()})`], ['Where', ROOM], ['Title', c.title]].concat(c.link ? [[c.linkType, linkHtml_(c), true]] : []))}
     ${tbd ? p_(tbdNote) : ''}
     ${p_(`${FORMAT_NOTE} A calendar invite is attached, and we'll send a reminder nearer the time.`)}
-    ${p_(cancelNote)}`);
+    ${p_(cancelNote)}
+    ${joinedList ? p_(`${listNote} <a href="${unsub}" style="color:#003262">Unsubscribe</a> if you'd rather not get it.`) : ''}`);
   send_({ to: c.email, subject: `You're presenting on ${fmtLong_(c.date)} at ${fmt12_(time)}pm`, body: text, htmlBody: html, attachments: [invite] });
 }
 
@@ -210,6 +214,15 @@ function subscribe_(d) {
   sheet.appendRow([email, safe_(name), new Date(), 'subscribed']);
   trySend_(() => sendWelcome_(email));
   return { ok: true };
+}
+
+// Presenters join the list automatically. Returns true if newly added; anyone who unsubscribed stays off.
+function addPresenterToList_(email, name) {
+  const sheet = getSubsSheet_();
+  const known = sheet.getDataRange().getValues().slice(1).some(r => String(r[0]).trim().toLowerCase() === email);
+  if (known) return false;
+  sheet.appendRow([email, safe_(name), new Date(), 'subscribed']);
+  return true;
 }
 
 function sendWelcome_(email) {

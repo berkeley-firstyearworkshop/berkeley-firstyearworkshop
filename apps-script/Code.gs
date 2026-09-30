@@ -82,7 +82,9 @@ function doPost(e) {
       safe_(clean.name), clean.email, safe_(clean.department), safe_(clean.title), clean.type, new Date(), clean.link, safe_(clean.linkType),
     ]);
     clearCache_();
-    trySend_(() => sendBookingConfirmation_(clean, time)); // see Mailing.gs
+    let joinedList = false;
+    trySend_(() => { joinedList = addPresenterToList_(clean.email, clean.name); }); // see Mailing.gs
+    trySend_(() => sendBookingConfirmation_(clean, time, joinedList));
     trySend_(() => sendAdminNotice_(clean, time));
     return json_({ ok: true, slot: { id: id, time: time }, sessions: buildSessions_() });
   } finally {
